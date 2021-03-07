@@ -37,7 +37,9 @@ def home():
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
         f"/api/v1.0/<start><br/>"
+        f"start date required format: YYYY-MM-DD<br/>"
         f"/api/v1.0/<start>/<end><br/>"
+        f"start date and end date required format: YYYY-MM-DD/YYYY-MM-DD<br/>"
     )
 
 
@@ -142,6 +144,92 @@ def tobs():
     return jsonify(temperature_of_observation)
 
 
+
+# average temperature start date only 
+@app.route("/api/v1.0/<start>")
+def temp_date(start):
+    #creating session 
+    session = Session(engine)
+
+    # grabbing the most recent date in the "measurements" table
+    most_recent_date = session.query(Measurement.date).order_by((Measurement.date).desc()).first()
+    most_recent_date = datetime.strptime(most_recent_date[0], '%Y-%m-%d').date()
+
+    # grabbing the earliest date in the "measurements" table
+    earliest_date = session.query(Measurement.date).order_by((Measurement.date).asc()).first()
+    earliest_date = datetime.strptime(earliest_date[0], '%Y-%m-%d').date()
+
+    start_date = datetime.strptime(start, '%Y-%m-%d').date()
+    
+
+    if start_date > most_recent_date:
+        return (f"{start} is unavailable")
+
+    elif start_date < earliest_date:
+        return (f"{start} is unavailable")
+
+    else:
+
+        query = session.query(func.min(Measurement.tobs), func.max(Measurement.tobs), func.avg(Measurement.tobs)).\
+                filter(Measurement.date >= start_date).\
+                filter(Measurement.tobs.isnot(None)).all()
+
+        #could use just a list, but makes more sense to me to build this as a dictionary 
+        results = []
+        for minimum, maximum, average in query:
+            temp_dictionary = {}
+            temp_dictionary["minimum_temperature"] = round(minimum,2) 
+            temp_dictionary["maximum_temperature"] = round(maximum,2)
+            temp_dictionary["average_temperature"] = round(average,2)
+            results.append(temp_dictionary)   
+
+        return jsonify(results)
+
+
+
+# average temperature start and end date     
+@app.route("/api/v1.0/<start>/<end>")
+def temp_date_range(start, end):
+    #creating session 
+    session = Session(engine)
+
+    # grabbing the most recent date in the "measurements" table
+    most_recent_date = session.query(Measurement.date).order_by((Measurement.date).desc()).first()
+    most_recent_date = datetime.strptime(most_recent_date[0], '%Y-%m-%d').date()
+
+    # grabbing the earliest date in the "measurements" table
+    earliest_date = session.query(Measurement.date).order_by((Measurement.date).asc()).first()
+    earliest_date = datetime.strptime(earliest_date[0], '%Y-%m-%d').date()
+
+    start_date = datetime.strptime(start, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end, '%Y-%m-%d').date()
+    
+
+    if start_date > most_recent_date or start_date < earliest_date or end_date > most_recent_date or end_date < earliest_date:
+        return (f"{start} is unavailable")
+
+    elif start_date > end_date:
+        return f"The start date cannot be later than the end date"
+
+    elif end_date < start_date:
+        return f"the end date cannot be earlier that the start date"
+
+    else:
+
+        query = session.query(func.min(Measurement.tobs), func.max(Measurement.tobs), func.avg(Measurement.tobs)).\
+                filter(and_(func.strftime(Measurement.date) >= start_date), func.strftime(Measurement.date <= end_date)).\
+                filter(Measurement.tobs.isnot(None)).all()
+
+        #could use just a list, but makes more sense to me to build this as a dictionary 
+        results = []
+        for minimum, maximum, average in query:
+            temp_dictionary = {}
+            temp_dictionary["minimum_temperature"] = round(minimum,2) 
+            temp_dictionary["maximum_temperature"] = round(maximum,2)
+            temp_dictionary["average_temperature"] = round(average,2)
+            results.append(temp_dictionary)   
+
+            return jsonify(results)
 
     
 if __name__ == '__main__':
